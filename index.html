@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Seznam očekávaných darů</title>
+  <style>
+    :root{
+      --bg:#f5f7fb;
+      --card:#ffffff;
+      --muted:#6b7280;
+      --accent:#2563eb;
+      --success:#059669;
+    }
+    html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+    body{background:var(--bg);display:flex;align-items:flex-start;justify-content:center;padding:40px}
+    .wrap{width:100%;max-width:760px}
+    header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:20px}
+    h1{margin:0;font-size:1.3rem}
+    p.lead{margin:4px 0 0;color:var(--muted);font-size:0.95rem}
+    .card{background:var(--card);border-radius:10px;padding:18px;box-shadow:0 6px 18px rgba(20,20,20,0.06)}
+    .list{display:grid;gap:10px;margin-top:12px}
+    .item{display:flex;align-items:center;justify-content:space-between;padding:12px;border-radius:8px;border:1px solid #eef2f7}
+    .left{display:flex;align-items:center;gap:12px}
+    .dot{width:10px;height:10px;border-radius:50%;background:#e5e7eb}
+    .title{font-weight:600}
+    .meta{color:var(--muted);font-size:0.9rem}
+    button.btn{background:var(--accent);color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+    button.btn:disabled{opacity:0.55;cursor:not-allowed;background:#94b9ff}
+    .reserved{color:var(--success);font-weight:600}
+    .empty{color:var(--muted);text-align:center;padding:18px}
+    footer{margin-top:10px;color:var(--muted);font-size:0.85rem;text-align:center}
+    @media (max-width:420px){
+      .left{flex-direction:column;align-items:flex-start}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Seznam očekávaných darů</h1>
+        <p class="lead">Vyberte dar a klikněte „Zamluvit“ — rezervace se uloží v prohlížeči.</p>
+      </div>
+    </header>
+
+    <div class="card" id="app">
+      <div id="list" class="list" aria-live="polite"></div>
+      <div id="empty" class="empty" style="display:none">Žádné dary k zobrazení.</div>
+      <footer>
+        <small>Data jsou uložena v localStorage vašeho prohlížeče.</small>
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const STORAGE_KEY = 'expectedGifts_v1';
+
+      const defaultGifts = [
+        { id: 1, name: 'Deka', reservedBy: null },
+        { id: 2, name: 'Kniha (dobrodružný román)', reservedBy: null },
+        { id: 3, name: 'Dárková čokoláda', reservedBy: null },
+        { id: 4, name: 'Stolní hra', reservedBy: null },
+        { id: 5, name: 'Plyšový medvídek', reservedBy: null }
+      ];
+
+      function loadGifts(){
+        try{
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if(!raw) return defaultGifts.slice();
+          const parsed = JSON.parse(raw);
+          if(!Array.isArray(parsed)) return defaultGifts.slice();
+          return parsed;
+        } catch(e){
+          console.error('Chyba při načítání localStorage:', e);
+          return defaultGifts.slice();
+        }
+      }
+
+      function saveGifts(gifts){
+        try{
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(gifts));
+        } catch(e){
+          console.error('Chyba při ukládání do localStorage:', e);
+          alert('Nepodařilo se uložit data do localStorage.');
+        }
+      }
+
+      function render(){
+        const listEl = document.getElementById('list');
+        const emptyEl = document.getElementById('empty');
+        listEl.innerHTML = '';
+        const gifts = loadGifts();
+        if(gifts.length === 0){
+          emptyEl.style.display = 'block';
+          return;
+        } else {
+          emptyEl.style.display = 'none';
+        }
+
+        gifts.forEach(gift => {
+          const item = document.createElement('div');
+          item.className = 'item';
+
+          const left = document.createElement('div');
+          left.className = 'left';
+          const dot = document.createElement('div');
+          dot.className = 'dot';
+          if(gift.reservedBy) dot.style.background = '#d1fae5';
+          left.appendChild(dot);
+
+          const text = document.createElement('div');
+          const title = document.createElement('div');
+          title.className = 'title';
+          title.textContent = gift.name;
+          text.appendChild(title);
+
+          const meta = document.createElement('div');
+          meta.className = 'meta';
+          if(gift.reservedBy){
+            meta.innerHTML = '<span class="reserved">Zamluveno:</span> ' + escapeHtml(gift.reservedBy);
+          } else {
+            meta.textContent = 'Volné';
+          }
+          text.appendChild(meta);
+
+          left.appendChild(text);
+          item.appendChild(left);
+
+          const right = document.createElement('div');
+          if(gift.reservedBy){
+            const btn = document.createElement('button');
+            btn.className = 'btn';
+            btn.textContent = 'Zamluveno';
+            btn.disabled = true;
+            right.appendChild(btn);
+          } else {
+            const btn = document.createElement('button');
+            btn.className = 'btn';
+            btn.textContent = 'Zamluvit';
+            btn.addEventListener('click', () => reserveGift(gift.id));
+            right.appendChild(btn);
+          }
+          item.appendChild(right);
+
+          listEl.appendChild(item);
+        });
+      }
+
+      function reserveGift(id){
+        const gifts = loadGifts();
+        const idx = gifts.findIndex(g => g.id === id);
+        if(idx === -1) return alert('Dar nenalezen.');
+        if(gifts[idx].reservedBy) return alert('Tento dar je už zamluvený.');
+
+        const name = prompt('Zadejte své jméno pro rezervaci daru:');
+        if(name === null) return; // uživatel zrušil
+        const trimmed = name.trim();
+        if(!trimmed){
+          alert('Jméno nesmí být prázdné.');
+          return;
+        }
+
+        gifts[idx].reservedBy = trimmed;
+        saveGifts(gifts);
+        render();
+      }
+
+      function escapeHtml(str){
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      (function init(){
+        const existing = localStorage.getItem(STORAGE_KEY);
+        if(!existing){
+          saveGifts(defaultGifts.slice());
+        }
+        render();
+      })();
+
+      window._giftsApp = { load: loadGifts, save: saveGifts, render: render };
+    })();
+  </script>
+</body>
+</html>
